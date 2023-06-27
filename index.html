@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://storage.googleapis.com/assets.meld.cx/agent/1.0.42/Agent.js"></script>
+    <style>
+        body {
+            text-align: center;
+            font-family: sans-serif;
+        }
+
+        h1, h2 {
+            margin-top: 100px;
+        }
+
+        button {
+            margin-top: 5px;
+            width: 280px;
+            height: 100px;
+        }
+
+        pre {
+            text-align: left;
+            font-size: 10px;
+            display: table;
+            margin-top: 40px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+    </style>
+    <title>Image Printer Demo</title>
+</head>
+
+<body>
+    <h1>Image Printer Demo</h1>
+
+    <button id="print">PRINT</button>
+    <hr>
+    <img id="preview" width="1080" src="print-preview.png"/>
+    <hr>
+    <pre id="result">Initialising...</pre>
+
+    <script>
+
+        const previewImage = document.getElementById('preview');
+        const resultData = document.getElementById('result');
+
+        const printButton = document.getElementById('print');
+
+        const agent = window.Agent;
+
+        const pixelsToMicrons = px => Math.ceil(px * 25400 / 96);
+
+        const getBase64Image = img => {
+            const canvas = document.createElement('canvas');
+            canvas.width = img.naturalWidth;
+            canvas.height = img.naturalHeight;
+
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0);
+
+            const dataURL = canvas.toDataURL('image/png');
+
+            return {
+                width: canvas.width,
+                height: canvas.height,
+                base64Image: dataURL.replace(/^data:image\/(png|jpg);base64,/, '')
+            };
+        }
+
+        const print = async() => {
+            try {
+                console.log('PRINT - START');
+
+                const printerAlias = 'custom'; //'CUSTOM KPM216HII-ETH (200dpi)'
+                const printers = await agent.Printer.getAllPrinters();
+                const printer = printers.find(p => p.name.toLowerCase().indexOf(printerAlias.toLowerCase()) >= 0);
+                if (!printer) {
+                    resultData.innerHTML = 'Please connect a printer and try again...';
+                    console.log(resultData.innerHTML);
+
+                    return;
+                }
+
+                const {base64Image, width, height} = getBase64Image(previewImage);
+
+                // agent.Printer.printFile(data, options, 'base64') - Print image formatted in Base64 encoding
+                // agent.Printer.printFile(data, options, 'hex') - Print image formatted in in HEX encoding (each byte encoded as two hexadecimal characters)
+
+                const extraHeightInPixels = 10; // Extra height alignment which might be useul for more optimal printing
+
+                await agent.Printer.printFile(
+                    base64Image,
+                    {
+                        deviceName: printer.name,
+                        pageSize: { // Can be A0, A1, A2, A3, A4, A5, A6, Legal, Letter, Tabloid, Ledger, or an Object containing height and width in microns
+                            width: pixelsToMicrons(width),
+                            height:  pixelsToMicrons(height + extraHeightInPixels)
+                        },
+                        landscape: false
+                    },
+                    'base64'
+                );
+
+                resultData.innerHTML = 'Printing completed';
+                console.log(resultData.innerHTML);
+
+            } catch (ex) {
+                resultData.innerHTML = ex.toString();
+                console.log(resultData.innerHTML);
+            } finally {
+                console.log('PRINT - END');
+            }
+        };
+
+        const initialise = async() => {
+            try {
+                await agent.onReadyAsync();
+
+                console.log('INITIALISE - START');
+
+                if (!agent.Printer) {
+                    resultData.innerHTML = 'Printer API is not supported';
+                    console.log(resultData.innerHTML);
+
+                    return;
+                }
+
+                const printers = await agent.Printer.getAllPrinters();
+                if (!printers || !printers.length) {
+                    resultData.innerHTML = 'Please connect a printer...';
+                    console.log(resultData.innerHTML);
+
+                    setTimeout(initialise, 5000);
+
+                    return;
+                }
+
+                printButton.onclick = async() => {
+                    try {
+                        resultData.innerHTML = '';
+                        printButton.innerText = 'PRINTING...';
+                        printButton.disabled = true;
+
+                        await print();
+                    } finally {
+                        printButton.innerText = 'PRINT';
+                        printButton.disabled = false;
+                    }
+                };
+
+                //resultData.innerHTML = 'Initialisation completed, waiting to start printing...';
+                resultData.innerHTML = JSON.stringify(printers, null, 2);
+                console.log(resultData.innerHTML);
+
+            } catch (ex) {
+                resultData.innerHTML = ex.toString();
+                console.log(resultData.innerHTML);
+            } finally {
+                console.log('INITIALISE - END');
+            }
+        };
+
+        initialise();
+
+    </script>
+</body>
+
+</html>
